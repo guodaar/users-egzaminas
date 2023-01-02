@@ -1,7 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { MongoClient } = require('mongodb');
+const { v4: uuidv4 } = require('uuid');
+const { MongoClient, ObjectId } = require('mongodb');
 
 const app = express();
 const port = process.env.PORT || 8080;
@@ -16,120 +17,35 @@ app.post('/fill', async (req, res) => {
   try {
     const response = await fetch('https://jsonplaceholder.typicode.com/users');
     const data = await response.json();
-    console.log(data);
+    const usersCollection = [];
+    const addressCollection = [];
+    data.forEach((element) => {
+      const id = uuidv4();
+      const user = {
+        _id: id,
+        name: `${element.name}`,
+        email: `${element.email}`,
+      };
+      const address = {
+        _id: id,
+        street: `${element.address.street}`,
+        city: `${element.address.city}`,
+      };
+      usersCollection.push(user);
+      addressCollection.push(address);
+    });
     const con = await client.connect();
     const users = await con
       .db('users_db')
       .collection('users')
-      .insertMany([
-        {
-          id: data[0].id,
-          name: `${data[0].name}`,
-          email: `${data[0].email}`,
-        },
-        {
-          id: +data[1].id,
-          name: `${data[1].name}`,
-          email: `${data[1].email}`,
-        },
-        {
-          id: +data[2].id,
-          name: `${data[2].name}`,
-          email: `${data[2].email}`,
-        },
-        {
-          id: +data[3].id,
-          name: `${data[3].name}`,
-          email: `${data[3].email}`,
-        },
-        {
-          id: +data[4].id,
-          name: `${data[4].name}`,
-          email: `${data[4].email}`,
-        },
-        {
-          id: +data[5].id,
-          name: `${data[5].name}`,
-          email: `${data[5].email}`,
-        },
-        {
-          id: +data[6].id,
-          name: `${data[6].name}`,
-          email: `${data[6].email}`,
-        },
-        {
-          id: +data[7].id,
-          name: `${data[7].name}`,
-          email: `${data[7].email}`,
-        },
-        {
-          id: +data[8].id,
-          name: `${data[8].name}`,
-          email: `${data[8].email}`,
-        },
-        {
-          id: +data[9].id,
-          name: `${data[9].name}`,
-          email: `${data[9].email}`,
-        },
-      ]);
-    const address = await con
+      .insertMany(usersCollection);
+    const addresses = await con
       .db('users_db')
       .collection('address')
-      .insertMany([
-        {
-          street: `${data[0].address.street}`,
-          city: `${data[0].address.city}`,
-          user_id: +data[0].id,
-        },
-        {
-          street: `${data[1].address.street}`,
-          city: `${data[1].address.city}`,
-          user_id: +data[1].id,
-        },
-        {
-          street: `${data[2].address.street}`,
-          city: `${data[2].address.city}`,
-          user_id: +data[2].id,
-        },
-        {
-          street: `${data[3].address.street}`,
-          city: `${data[3].address.city}`,
-          user_id: +data[3].id,
-        },
-        {
-          street: `${data[4].address.street}`,
-          city: `${data[4].address.city}`,
-          user_id: +data[4].id,
-        },
-        {
-          street: `${data[5].address.street}`,
-          city: `${data[5].address.city}`,
-          user_id: +data[5].id,
-        },
-        {
-          street: `${data[6].address.street}`,
-          city: `${data[6].address.city}`,
-          user_id: +data[6].id,
-        },
-        {
-          street: `${data[7].address.street}`,
-          city: `${data[7].address.city}`,
-          user_id: +data[7].id,
-        },
-        {
-          street: `${data[8].address.street}`,
-          city: `${data[8].address.city}`,
-          user_id: +data[8].id,
-        },
-        {
-          street: `${data[9].address.street}`,
-          city: `${data[9].address.city}`,
-          user_id: +data[9].id,
-        },
-      ]);
+      .insertMany(addressCollection);
     await con.close();
-    res.send(address);
+    res.send(users);
+    res.send(addresses);
   } catch (error) {
     res.status(500).send({ error });
   }
@@ -137,14 +53,15 @@ app.post('/fill', async (req, res) => {
 
 app.post('/users', async (req, res) => {
   try {
-    const { id, name, email } = req.body;
-    const { street, city, userId } = req.body.address;
+    const { name, email } = req.body;
+    const { street, city } = req.body.address;
     const con = await client.connect();
+    const id = uuidv4();
     const user = await con
       .db('users_db')
       .collection('users')
       .insertOne({
-        id: +id,
+        _id: id,
         name: `${name}`,
         email: `${email}`,
       });
@@ -152,11 +69,12 @@ app.post('/users', async (req, res) => {
       .db('users_db')
       .collection('address')
       .insertOne({
+        _id: id,
         street: `${street}`,
         email: `${city}`,
-        user_id: +userId,
       });
-    res.send(user, address);
+    res.send(user);
+    res.send(address);
     res.status(400).send({
       error: 'Invalid request',
     });
@@ -172,7 +90,7 @@ app.get('/users/names', async (req, res) => {
     const data = await con
       .db('users_db')
       .collection('users')
-      .aggregate([{ $project: { id: 1, name: 1 } }])
+      .aggregate([{ $project: { _id: 1, name: 1 } }])
       .toArray();
     await con.close();
     res.send(data);
@@ -202,8 +120,8 @@ app.get('/users/address', async (req, res) => {
         {
           $lookup: {
             from: 'address',
-            localField: 'id',
-            foreignField: 'user_id',
+            localField: '_id',
+            foreignField: '_id',
             as: 'address',
           },
         },
@@ -214,7 +132,7 @@ app.get('/users/address', async (req, res) => {
             address: '$address',
           },
         },
-        { $unset: ['address._id', 'address.user_id'] },
+        { $unset: ['address._id'] },
       ])
       .toArray();
     await con.close();
